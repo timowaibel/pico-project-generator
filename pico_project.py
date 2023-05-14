@@ -34,6 +34,7 @@ VSCODE_LAUNCH_FILENAME = 'launch.json'
 VSCODE_C_PROPERTIES_FILENAME = 'c_cpp_properties.json'
 VSCODE_SETTINGS_FILENAME ='settings.json'
 VSCODE_EXTENSIONS_FILENAME ='extensions.json'
+VSCODE_WORKSPACE_FILENAME ='Workspace.code-workspace'
 VSCODE_FOLDER='.vscode'
 
 CONFIG_UNSET="Not set"
@@ -1194,8 +1195,40 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
                    '  "recommendations": [\n'
                    '    "marus25.cortex-debug",\n'
                    '    "ms-vscode.cmake-tools",\n'
-                   '    "ms-vscode.cpptools"\n'
+                   '    "ms-vscode.cpptools",\n'
+                   '    "seunlanlege.action-buttons"\n'
                    '  ]\n'
+                   '}\n')
+
+            w1 = ( '{\n'
+                   '  "folders": [\n'
+                   '    {\n'
+                   '      "path": "."\n'
+                   '    }\n'
+                   '  ],\n'
+                   '  "settings": {\n'
+                   '    "actionButtons": {\n'
+                   '      "reloadButton": null,\n'
+                   '      "defaultColor": "white",\n'
+                   '      "useScripts": true,\n'
+                   '      "npmClient": "npm",\n'
+                   '      "monorepo": true,\n'
+                   '      "commands": [\n'
+                   '        {\n'
+                   '          "name": "Generate",\n'
+                   '          "color": "#aaaaff",\n'
+                   '          "command": "cmake -G \'Unix Makefiles\'",\n'
+                   '          "singleInstance": true\n'
+                   '        },\n'
+                   '        {\n'
+                   '          "name": "Build",\n'
+                   '          "color": "#aaffaa",\n'
+                   '          "command": "cmake --build",\n'
+                   '          "singleInstance": true\n'
+                   '        }\n'
+                   '      ]\n'
+                   '    }\n'
+                   '  }\n'
                    '}\n')
 
             # Create a build folder, and run our cmake project build from it
@@ -1204,8 +1237,7 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
 
             os.chdir(VSCODE_FOLDER)
 
-            filename = VSCODE_LAUNCH_FILENAME
-            file = open(filename, 'w')
+            file = open(VSCODE_LAUNCH_FILENAME, 'w')
             file.write(v1)
             file.close()
 
@@ -1219,6 +1251,12 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
 
             file = open(VSCODE_EXTENSIONS_FILENAME, 'w')
             file.write(e1)
+            file.close()
+
+            os.chdir(projectPath)
+
+            file = open(f'{projectName}VSCODE_WORKSPACE_FILENAME', 'w')
+            file.write(w1)
             file.close()
 
         else :
