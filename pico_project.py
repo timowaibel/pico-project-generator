@@ -1215,15 +1215,21 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
                    '      "monorepo": true,\n'
                    '      "commands": [\n'
                    '        {\n'
+                   '          "name": "Generate Debug",\n'
+                   '          "color": "#aaaaff",\n'
+                   '          "command": "cmake -Bbuild -S. -DCMAKE_BUILD_TYPE=Debug",\n'
+                   '          "singleInstance": true\n'
+                   '        },\n'
+                   '        {\n'
                    '          "name": "Generate",\n'
                    '          "color": "#aaaaff",\n'
-                   '          "command": "cmake -G \'Unix Makefiles\'",\n'
+                   '          "command": "cmake -Bbuild -S.",\n'
                    '          "singleInstance": true\n'
                    '        },\n'
                    '        {\n'
                    '          "name": "Build",\n'
                    '          "color": "#aaffaa",\n'
-                   '          "command": "cmake --build",\n'
+                   '          "command": "cmake --build build -j4",\n'
                    '          "singleInstance": true\n'
                    '        }\n'
                    '      ]\n'
@@ -1255,7 +1261,7 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
 
             os.chdir(projectPath)
 
-            file = open(f'{projectName}VSCODE_WORKSPACE_FILENAME', 'w')
+            file = open(f'{projectName}{VSCODE_WORKSPACE_FILENAME}', 'w')
             file.write(w1)
             file.close()
 
