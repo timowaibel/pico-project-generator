@@ -1,29 +1,43 @@
 #!/usr/bin/env python3
 
 #
-# Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+# Copyright (c) 2020-2023 Raspberry Pi (Trading) Ltd.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
 
 import argparse
-from copy import copy
 import os
-from pyexpat import features
 import shutil
 from pathlib import Path
-import string
 import sys
 import subprocess
 import platform
 import shlex
 import csv
 
-import tkinter as tk
-from tkinter import messagebox as mb
-from tkinter import filedialog as fd
-from tkinter import simpledialog as sd
-from tkinter import ttk
+# TODO: conditional import of tkinter if --gui option is used
+try:
+    import tkinter as tk
+    from tkinter import \
+        messagebox as mb, \
+        filedialog as fd, \
+        simpledialog as sd, \
+        ttk
+
+except ImportError:
+    print("[\033[91mERROR\033[0m] tkinter module not found")
+    sys.exit(1)
+
+
+class ExitCodes:
+    """Exit codes per reason; range starts at 0xA00 to avoid clashing with OS reserved exit codes"""
+    SUCCESS = 0
+    INVALID_PROJECT_PATH = -0xA01
+    EXISTING_PROJECT_NO_OVERWRITE = -0xA02
+    NO_COMPILER_FOUND = -0xA03
+    NO_PROJECT_NAME = -0xA04
+    PICO_SDK_NOT_FOUND = -0xA05
 
 CMAKELIST_FILENAME = 'CMakeLists.txt'
 CMAKECACHE_FILENAME = 'CMakeCache.txt'
@@ -76,8 +90,9 @@ stdlib_examples_list = {
     'div' :     ("Low level HW Divider",    "divider.c",        "hardware/divider.h",   "hardware_divider")
 }
 
-debugger_list = ["SWD", "PicoProbe"]
-debugger_config_list = ["raspberrypi-swd.cfg", "picoprobe.cfg"]
+debugger_list = ["SWD", "PicoProbe", "CMSIS-DAP Debug Probe"]
+debugger_config_list = ["raspberrypi-swd.cfg", "picoprobe.cfg", "cmsis-dap.cfg"]
+debug_server_args_list = ["", "", "\"-c\", \"adapter speed 5000\" "]
 
 DEFINES = 0
 INITIALISERS = 1
@@ -257,11 +272,11 @@ def RunGUI(sdkpath, args):
     app.configure(background=GetBackground())
 
     root.mainloop()
-    sys.exit(0)
+    sys.exit(ExitCodes.SUCCESS)
 
 def RunWarning(message):
     mb.showwarning('Raspberry Pi Pico Project Generator', message)
-    sys.exit(0)
+    sys.exit(ExitCodes.SUCCESS)
 
 import threading
 
@@ -645,7 +660,7 @@ class ProjectWindow(tk.Frame):
 
         locationlbl = ttk.Label(mainFrame, text='Location :').grid(row=optionsRow, column=0, sticky=tk.E)
         self.locationName = tk.StringVar()
-        self.locationName.set(os.getcwd())
+        self.locationName.set(os.getcwd() if not args.projectRoot else args.projectRoot)
         locationEntry = ttk.Entry(mainFrame, textvariable=self.locationName).grid(row=optionsRow, column=1, columnspan=3, sticky=tk.W+tk.E, padx=5)
         locationBrowse = ttk.Button(mainFrame, text='Browse', command=self.browse).grid(row=3, column=4)
 
@@ -808,7 +823,7 @@ class ProjectWindow(tk.Frame):
 
     def quit(self):
         # TODO Check if we want to exit here
-        sys.exit(0)
+        sys.exit(ExitCodes.SUCCESS)
 
     def OK(self):
         # OK, grab all the settings from the page, then call the generators
@@ -914,6 +929,7 @@ def ParseCommandLine():
     parser.add_argument("-board", "--boardtype", action="store", default='pico', help="Select board type (see --boardlist for available boards)")
     parser.add_argument("-bl", "--boardlist", action="store_true", help="List available board types")
     parser.add_argument("-cp", "--cpath", help="Override default VSCode compiler path")
+    parser.add_argument("-root", "--projectRoot", help="Override default project root where the new project will be created")
 
     return parser.parse_args()
 
@@ -1121,6 +1137,7 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
     os.chdir(projectPath)
 
     deb = debugger_config_list[debugger]
+    server_args = debug_server_args_list[debugger]
 
     for p in projects :
         if p == 'vscode':
@@ -1138,6 +1155,9 @@ def generateProjectFiles(projectPath, projectName, sdkPath, projects, debugger):
                   '      "type": "cortex-debug",\n'
                   '      "servertype": "openocd",\n'
                   '      "gdbPath": "gdb-multiarch",\n'
+                  '      "serverArgs": [\n'
+                  f'        {server_args}\n'
+                  '      ],\n'
                   '      "device": "RP2040",\n'
                   '      "configFiles": [\n' + \
                   f'        "interface/{deb}",\n' + \
@@ -1308,7 +1328,7 @@ def DoEverything(parent, params):
             return
         else:
             print('Invalid project path')
-            sys.exit(-1)
+            sys.exit(ExitCodes.INVALID_PROJECT_PATH)
 
     oldCWD = os.getcwd()
     os.chdir(params['projectRoot'])
@@ -1331,13 +1351,13 @@ def DoEverything(parent, params):
                     return
             else:
                 print('There already appears to be a project in this folder. Use the --overwrite option to overwrite the existing project')
-                sys.exit(-1)
+                sys.exit(ExitCodes.EXISTING_PROJECT_NO_OVERWRITE)
 
         # We should really confirm the user wants to overwrite
         #print('Are you sure you want to overwrite the existing project files? (y/N)')
         #c = input().split(" ")[0]
         #if c != 'y' and c != 'Y' :
-        #    sys.exit(0)
+        #    sys.exit(ExitCodes.SUCCESS)
 
     # Copy the SDK finder cmake file to our project folder
     # Can be found here <PICO_SDK_PATH>/external/pico_sdk_import.cmake
@@ -1438,11 +1458,11 @@ if c == None:
         RunWarning(m)
     else:
         print(m)
-    sys.exit(-1)
+    sys.exit(ExitCodes.NO_COMPILER_FOUND)
 
 if args.name == None and not args.gui and not args.list and not args.configs and not args.boardlist:
     print("No project name specfied\n")
-    sys.exit(-1)
+    sys.exit(ExitCodes.NO_PROJECT_NAME)
 
 # Check if we were provided a compiler path, and override the default if so
 if args.cpath:
@@ -1456,7 +1476,7 @@ LoadConfigurations()
 p = CheckSDKPath(args.gui)
 
 if p == None:
-    sys.exit(-1)
+    sys.exit(ExitCodes.PICO_SDK_NOT_FOUND)
 
 sdkPath = Path(p)
 
@@ -1466,7 +1486,7 @@ boardtype_list.sort()
 if args.gui:
     RunGUI(sdkPath, args) # does not return, only exits
 
-projectRoot = Path(os.getcwd())
+projectRoot = Path(os.getcwd()) if not args.projectRoot else Path(args.projectRoot)
 
 if args.list or args.configs or args.boardlist:
     if args.list:
@@ -1487,7 +1507,7 @@ if args.list or args.configs or args.boardlist:
             print(board)
         print('\n')
 
-    sys.exit(0)
+    sys.exit(ExitCodes.SUCCESS)
 else :
     params={
         'sdkPath'       : sdkPath,
